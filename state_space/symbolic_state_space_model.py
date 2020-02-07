@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+import collections
 from dataclasses import dataclass
 import numbers
 import numpy as np
@@ -6,12 +6,17 @@ import statsmodels as sm
 import sympy as sym
 import typing as tp
 
+from .compiled_matrix import CompiledMatrix
+from .parameter_transformation import (
+    ParameterTransformation,
+    LambdaUnivariateTransformation,
+    IndependentParameterTransformation)
+
 from .symbolic_dimension_checks import (
     SympyMatrixCandidate,
     check_sympy_matrix,
     check_d_dimensional_square_matrix_sympy_expression,
-    check_d_dimensional_column_vector_sympy_expression,
-    check_m_by_n_matrix_sympy_expression)
+    check_d_dimensional_column_vector_sympy_expression)
 
 
 def _symbols_in_expression(
@@ -29,6 +34,28 @@ class SymbolicStateSpaceModelCoefficients:
     T: tp.Optional[SympyMatrixCandidate] = None
     c: tp.Optional[SympyMatrixCandidate] = None
     d: tp.Optional[SympyMatrixCandidate] = None
+
+    @property
+    def stats_models_coefficient_label_to_symbolic_coefficient_map(self) \
+            -> tp.Dict[str, sym.MatrixBase]:
+        return {'design': self.Z,
+                'obs_intercept': self.d,
+                'obs_cov': self.H,
+                'transition': self.T,
+                'state_intercept': self.c,
+                'selection': self.R,
+                'state_cov': self.Q}
+
+    @property
+    def coefficients(self) -> tp.Tuple[tp.Optional[SympyMatrixCandidate], ...]:
+        return self.Z, self.H, self.R, self.Q, self.T, self.c, self.d
+
+    @property
+    def free_symbols(self) -> tp.FrozenSet[sym.Symbol]:
+        return frozenset().union([coefficient.free_symbols
+                                  for coefficient
+                                  in self.coefficients
+                                  if coefficient is not None])
 
 
 def _check_and_fix_input_matrices_and_infer_dimensions(
@@ -118,105 +145,11 @@ def _ensure_symbols_not_in_coefficients(
                         coefficients.Q,
                         coefficients.R,
                         coefficients.Z):
-        if _symbols_in_expression(symbols=state_vector_symbols,
+        if coefficient is not None and \
+           _symbols_in_expression(symbols=state_vector_symbols,
                                   expression=coefficient):
             raise ValueError(f'State vector symbol(s) must not appear in any '
                              f'coefficient, but they do in {coefficient.name}.')
-
-
-class ParameterTransformation(ABC):
-    @abstractmethod
-    def transform_params(self, unconstrained: np.ndarray):
-        pass
-
-    @abstractmethod
-    def untransform_params(self, constrained: np.ndarray):
-        pass
-
-
-class UnivariateTransformation(ABC):
-    @abstractmethod
-    def transform_param(self, unconstrained: numbers.Number):
-        pass
-
-    @abstractmethod
-    def untransform_param(self, constrained: numbers.Number):
-        pass
-
-
-class LambdaUnivariateTransformation(UnivariateTransformation):
-    def __init__(self,
-                 transform_function: tp.Callable[[numbers.Number],
-                                                 numbers.Number],
-                 untransform_function: tp.Callable[[numbers.Number],
-                                                   numbers.Number]):
-
-        self._transform_function = transform_function
-        self._untransform_function = untransform_function
-
-    def transform_param(self, unconstrained: numbers.Number):
-        return self._transform_function(unconstrained)
-
-    @abstractmethod
-    def untransform_param(self, constrained: numbers.Number):
-        return self._untransform_function(constrained)
-
-
-class IndependentParameterTransformation(ParameterTransformation):
-    def __init__(self,
-                 parameter_symbols: tp.Tuple[sym.Symbol, ...],
-                 parameter_symbol_to_univariate_transformation_map:
-                 tp.Dict[sym.Symbol, UnivariateTransformation]):
-        self._parameter_symbols = parameter_symbols
-        self._parameter_symbol_to_univariate_transformation_map \
-            = parameter_symbol_to_univariate_transformation_map
-
-    def transform_params(self, unconstrained: np.ndarray):
-        constrained = np.full_like(unconstrained, fill_value=np.nan)
-
-        for i, parameter_symbol in enumerate(self._parameter_symbols):
-            univariate_transform = \
-                (self
-                 ._parameter_symbol_to_univariate_transformation_map
-                 .get(parameter_symbol))
-
-            if univariate_transform is None:
-                constrained[i] = unconstrained[i]
-            else:
-                constrained[i] = univariate_transform.transform_param(unconstrained[i])
-
-        return constrained
-
-    def untransform_params(self, constrained: np.ndarray):
-        unconstrained = np.full_like(constrained, fill_value=np.nan)
-
-        for i, parameter_symbol in enumerate(self._parameter_symbols):
-            univariate_transform = \
-                (self
-                 ._parameter_symbol_to_univariate_transformation_map
-                 .get(parameter_symbol))
-
-            if univariate_transform is None:
-                unconstrained[i] = constrained[i]
-            else:
-                unconstrained[i] = univariate_transform.untransform_param(constrained[i])
-
-        return unconstrained
-
-
-# @dataclass(frozen=True)
-# class UnivariateBounds:
-#     upper: numbers.Number
-#     lower: numbers.Number
-#
-#
-# class RectangularParameterRestriction(IndependentParameterTransformation):
-#     def __init__(self,
-#                  parameter_symbols: tp.Tuple[sym.Symbol, ...],
-#                  parameter_symbol_to_bounds_map: tp.Dict[sym.Symbol,
-#                                                          UnivariateBounds]):
-#         self._parameter_symbols = parameter_symbols
-#         self._parameter_symbol_to_bounds_map = parameter_symbol_to_bounds_map
 
 
 class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
@@ -255,7 +188,6 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
         Z: design matrix
         d: observation intercept
         H: observation covariance matrix
-
 
     """
 
@@ -326,25 +258,46 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
                    initialization='approximate_diffuse',
                    loglikelihood_burn=self.k_states))
 
-        # The transition matrix must be of shape
-        # (k_states, k_states, n_obs) if coefficients are time-varying or
-        # (k_states, k_states) if coefficients are time-invariant
-        transition_matrix = np.zeros((1, 1))
+        # determine which symbols in coefficients are not parameters
+        self._exogenous_data_symbols \
+            = tuple(self
+                    ._coefficients
+                    .free_symbols
+                    .difference(parameter_symbols))
 
-        # The design matrix must be of shape (k_endog, k_states, n_obs)
-        design_matrix = np.ones((self.k_endog, self.k_states, n_obs))
+        # organize exogenous data which the coefficients depend on in a tuple
+        self._exogenous_data = \
+            tuple([data_symbol_to_data_map[exogenous_data_symbol]
+                   for exogenous_data_symbol
+                   in self._exogenous_data_symbols])
 
-        # Initialize the matrices
-        self.ssm['design'] = design_matrix
-        self.ssm['transition'] = transition_matrix
-        self.ssm['selection'] = np.ones((1, 1))
+        # link parameter symbols and exogenous data symbols
+        all_parameter_symbols = \
+            tuple(list(parameter_symbols) + list(self._exogenous_data_symbols))
 
-        # Cache some indices
+        # compile coefficient matrices
+        self._stats_models_coefficient_label_to_compiled_coefficient_map: tp.Dict[str, CompiledMatrix] = \
+            {label: CompiledMatrix(symbols=all_parameter_symbols,
+                                   matrix_expression=coefficient,
+                                   label=label)
+             for label, coefficient
+             in (self
+                 ._coefficients
+                 .stats_models_coefficient_label_to_symbolic_coefficient_map
+                 .items())}
 
-    #         self._state_cov_idx = ('state_cov',) + np.diag_indices(k_posdef)
+        # evaluate compiled coefficient matrices and populate statsmodels
+        start_parameter_values_and_exogenous_data = \
+            tuple(list(self.start_params) + list(self._exogenous_data))
 
-    # Exogenous data
-    #         (self.k_exog, exog) = prepare_exog(exog)
+        for label, compiled_coefficient \
+                in (self
+                    ._stats_models_coefficient_label_to_compiled_coefficient_map
+                    .items()):
+            self.ssm[label] = \
+                (compiled_coefficient
+                 .evaluate_matrix(numeric_values
+                                  =start_parameter_values_and_exogenous_data))
 
     @property
     def coefficients(self) -> SymbolicStateSpaceModelCoefficients:
@@ -378,6 +331,10 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
                       in self.parameter_symbols])
 
     @property
+    def exogenous_data_symbols(self) -> tp.Tuple[sym.Symbol, ...]:
+        return self._exogenous_data_symbols
+
+    @property
     def start_params(self):
         start_parameters = \
             [self._parameter_symbols_to_start_parameters_map[parameter_symbol]
@@ -401,38 +358,23 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
         #     = (super(SymbolicStateSpaceModelViaMaximumLikelihood, self)
         #        .update(params, *args, **kwargs))
 
-        parameter_symbols_to_parameters_map = \
-            {parameter_symbol: numeric_parameter
-             for numeric_parameter, parameter_symbol
-             in zip(params, self.parameter_symbols)}
+        # parameter_symbols_to_parameters_map = \
+        #     {parameter_symbol: numeric_parameter
+        #      for numeric_parameter, parameter_symbol
+        #      in zip(params, self.parameter_symbols)}
 
-        alpha_mu, beta_mu, sigma_2, sigma_2_mu = params
+        # evaluate compiled coefficient matrices and populate statsmodels
+        numeric_values = \
+            tuple(list(params) + list(self._exogenous_data))
 
-        # ToDo: Optimization for matrices that do not depend on parameters (put them in init)
-        # Observation covariance
-        # ToDo: loop over all elements
-        self.ssm['obs_cov', 0, 0] = \
-            self.H.eval(parameter_symbols_to_parameters_map)
+        for label, compiled_coefficient \
+                in (self
+                    ._stats_models_coefficient_label_to_compiled_coefficient_map
+                    .items()):
+            (compiled_coefficient
+             .set_stats_models_matrix(ssm=self.ssm,
+                                      numeric_values=numeric_values))
 
-        # State covariance
-        self.ssm['state_cov', 0, 0] = \
-            self.Q.eval(parameter_symbols_to_parameters_map)
-
-        # State intercept
-        if self.c is not None:
-            self.ssm['state_intercept', 0, 0] = None
-
-        # State transition
-        self.ssm['transition', 0, 0] = beta_mu
-
-        # self.ssm['design'] = design_matrix
-        # self.ssm['selection'] = np.ones((1, 1))
-
-        # self.ssm['obs_intercept', 0, 0]
-
-
-
-# ToDo: Q and H must not be None
 
 class SymbolicTimeVaryingEquityPremiumModel(
         SymbolicStateSpaceModelViaMaximumLikelihood):
@@ -485,5 +427,3 @@ class SymbolicTimeVaryingEquityPremiumModel(
                          c=c,
                          Q=Q,
                          H=H)
-
-
