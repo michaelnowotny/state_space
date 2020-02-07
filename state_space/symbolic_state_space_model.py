@@ -1,18 +1,17 @@
-import collections
 from dataclasses import dataclass
 import numbers
 import numpy as np
-import statsmodels as sm
+import statsmodels.api as sm
 import sympy as sym
 import typing as tp
 
-from .compiled_matrix import CompiledMatrix
-from .parameter_transformation import (
+from state_space.compiled_matrix import CompiledMatrix
+from state_space.parameter_transformation import (
     ParameterTransformation,
     LambdaUnivariateTransformation,
     IndependentParameterTransformation)
 
-from .symbolic_dimension_checks import (
+from state_space.symbolic_dimension_checks import (
     SympyMatrixCandidate,
     check_sympy_matrix,
     check_d_dimensional_square_matrix_sympy_expression,
@@ -52,10 +51,10 @@ class SymbolicStateSpaceModelCoefficients:
 
     @property
     def free_symbols(self) -> tp.FrozenSet[sym.Symbol]:
-        return frozenset().union([coefficient.free_symbols
-                                  for coefficient
-                                  in self.coefficients
-                                  if coefficient is not None])
+        return frozenset().union(*[coefficient.free_symbols
+                                   for coefficient
+                                   in self.coefficients
+                                   if coefficient is not None])
 
 
 def _check_and_fix_input_matrices_and_infer_dimensions(
@@ -194,6 +193,7 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
     def __init__(self,
                  parameter_symbols: tp.Tuple[sym.Symbol, ...],
                  state_vector_symbols: tp.Tuple[sym.Symbol, ...],
+                 observation_vector_symbols: tp.Tuple[sym.Symbol, ...],
                  data_symbol_to_data_map: tp.Dict[sym.Symbol, np.ndarray],
                  parameter_symbols_to_start_parameters_map:
                  tp.Dict[sym.Symbol, numbers.Number],
@@ -221,7 +221,7 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
         self._parameter_transformation = parameter_transformation
 
         # check coefficients and infer model dimension
-        self._coefficients, self._k_endog, self._k_states, self._k_posdef = \
+        self._coefficients, k_endog, k_states, k_posdef = \
             _check_and_fix_input_matrices_and_infer_dimensions(
                 SymbolicStateSpaceModelCoefficients(Z=Z,
                                                     R=R,
@@ -238,25 +238,34 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
 
         # check to make sure that the dimension of the state vector matches the
         # dimension of the state transition matrix
-        if not len(state_vector_symbols) == self.k_states:
+        if not len(state_vector_symbols) == k_states:
             raise ValueError('The dimension of the state vector must match the '
                              'dimension of the state transition matrix.')
+
+        # check to make sure that the dimension of the observation vector
+        # matches the dimension in the coefficients
+        if not len(observation_vector_symbols) == k_endog:
+            raise ValueError('The dimension of the observation vector must '
+                             'match the dimension in the coefficients.')
 
         # infer the number of observations
         n_obs = max([len(x) for x in data_symbol_to_data_map.values()])
 
         # construct endogenous data (vector of observations)
-        endogenous_data = np.full((self.k_states, n_obs), fill_value=np.nan)
-        for i, state_vector_symbol in enumerate(state_vector_symbols):
-            endogenous_data[i, :] = data_symbol_to_data_map[state_vector_symbol]
+        endogenous_data = np.full((k_states, n_obs), fill_value=np.nan)
+        for i, observation_vector_symbol in enumerate(observation_vector_symbols):
+            endogenous_data[i, :] = data_symbol_to_data_map[observation_vector_symbol]
+
+        endogenous_data = endogenous_data.squeeze()
 
         # Initialize the numeric state space representation
         (super(SymbolicStateSpaceModelViaMaximumLikelihood, self)
          .__init__(endog=endogenous_data,
-                   k_endog=self.k_endog,
-                   k_posdef=self.k_posdef,
+                   # k_endog=k_endog,
+                   k_states=k_states,
+                   k_posdef=k_posdef,
                    initialization='approximate_diffuse',
-                   loglikelihood_burn=self.k_states))
+                   loglikelihood_burn=k_states))
 
         # determine which symbols in coefficients are not parameters
         self._exogenous_data_symbols \
@@ -284,7 +293,8 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
              in (self
                  ._coefficients
                  .stats_models_coefficient_label_to_symbolic_coefficient_map
-                 .items())}
+                 .items())
+             if coefficient is not None}
 
         # evaluate compiled coefficient matrices and populate statsmodels
         start_parameter_values_and_exogenous_data = \
@@ -302,18 +312,6 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
     @property
     def coefficients(self) -> SymbolicStateSpaceModelCoefficients:
         return self._coefficients
-
-    @property
-    def k_endog(self) -> int:
-        return self._k_endog
-
-    @property
-    def k_states(self) -> int:
-        return self._k_states
-
-    @property
-    def k_posdef(self) -> int:
-        return self._k_posdef
 
     @property
     def parameter_symbols(self) -> tp.Tuple[sym.Symbol, ...]:
@@ -387,21 +385,22 @@ class SymbolicTimeVaryingEquityPremiumModel(
 
         alpha_mu, beta_mu, sigma_2, sigma_2_mu = parameter_symbols
 
-        H = sym.Matrix(sigma_2)
-        Q = sym.Matrix(sigma_2_mu)
-        c = sym.Matrix(alpha_mu)
-        T = sym.Matrix(beta_mu)
+        H = sym.Matrix([sigma_2])
+        Q = sym.Matrix([sigma_2_mu])
+        c = sym.Matrix([alpha_mu])
+        T = sym.Matrix([beta_mu])
         Z = sym.Matrix.ones(rows=1, cols=1)
         R = sym.Matrix.ones(rows=1, cols=1)
 
-        state_vector_symbols = sym.symbols('mu')
+        state_vector_symbols = tuple([sym.Symbol('mu')])
         y = sym.Symbol('y')
         data_symbol_to_data_map = {y: excess_returns}
+        excess_return_variance = np.var(excess_returns)
         parameter_symbols_to_start_parameters_map = \
             {alpha_mu: 0.0,
              beta_mu: 0.0,
-             sigma_2: np.var(self.endog),
-             sigma_2_mu: np.var(self.endog)}
+             sigma_2: excess_return_variance,
+             sigma_2_mu: excess_return_variance}
 
         squared_univariate_transform = \
             LambdaUnivariateTransformation(
@@ -417,6 +416,7 @@ class SymbolicTimeVaryingEquityPremiumModel(
 
         super().__init__(parameter_symbols=parameter_symbols,
                          state_vector_symbols=state_vector_symbols,
+                         observation_vector_symbols=tuple([y]),
                          data_symbol_to_data_map=data_symbol_to_data_map,
                          parameter_symbols_to_start_parameters_map
                          =parameter_symbols_to_start_parameters_map,
@@ -427,3 +427,8 @@ class SymbolicTimeVaryingEquityPremiumModel(
                          c=c,
                          Q=Q,
                          H=H)
+
+
+if __name__ == '__main__':
+    time_varying_equity_premium_model = \
+        SymbolicTimeVaryingEquityPremiumModel(excess_returns=np.ones((15, )))

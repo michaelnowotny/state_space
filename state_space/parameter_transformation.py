@@ -39,7 +39,6 @@ class LambdaUnivariateTransformation(UnivariateTransformation):
     def transform_param(self, unconstrained: numbers.Number):
         return self._transform_function(unconstrained)
 
-    @abstractmethod
     def untransform_param(self, constrained: numbers.Number):
         return self._untransform_function(constrained)
 
