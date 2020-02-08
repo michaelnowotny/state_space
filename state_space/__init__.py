@@ -1,5 +1,5 @@
 from .symbolic_state_space_model import \
-    SymbolicStateSpaceModelViaMaximumLikelihood, SymbolicTimeVaryingEquityPremiumModel
+    SymbolicStateSpaceModelViaMaximumLikelihood
 
 from .parameter_transformation import (
     ParameterTransformation,

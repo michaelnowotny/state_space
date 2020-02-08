@@ -7,15 +7,15 @@ import typing as tp
 
 from state_space.compiled_matrix import CompiledMatrix
 from state_space.parameter_transformation import (
-    ParameterTransformation,
-    LambdaUnivariateTransformation,
-    IndependentParameterTransformation)
+    ParameterTransformation
+)
 
 from state_space.symbolic_dimension_checks import (
     SympyMatrixCandidate,
     check_sympy_matrix,
     check_d_dimensional_square_matrix_sympy_expression,
-    check_d_dimensional_column_vector_sympy_expression)
+    check_d_dimensional_column_vector_sympy_expression
+)
 
 
 def _symbols_in_expression(
@@ -26,28 +26,34 @@ def _symbols_in_expression(
 
 @dataclass(frozen=True)
 class SymbolicStateSpaceModelCoefficients:
-    Z: SympyMatrixCandidate
-    H: SympyMatrixCandidate
-    R: SympyMatrixCandidate
-    Q: SympyMatrixCandidate
-    T: tp.Optional[SympyMatrixCandidate] = None
-    c: tp.Optional[SympyMatrixCandidate] = None
-    d: tp.Optional[SympyMatrixCandidate] = None
+    design_matrix: SympyMatrixCandidate
+    observation_covariance_matrix: SympyMatrixCandidate
+    selection_matrix: SympyMatrixCandidate
+    state_covariance_matrix: SympyMatrixCandidate
+    transition_matrix: tp.Optional[SympyMatrixCandidate] = None
+    state_intercept_vector: tp.Optional[SympyMatrixCandidate] = None
+    observation_intercept_vector: tp.Optional[SympyMatrixCandidate] = None
 
     @property
     def stats_models_coefficient_label_to_symbolic_coefficient_map(self) \
             -> tp.Dict[str, sym.MatrixBase]:
-        return {'design': self.Z,
-                'obs_intercept': self.d,
-                'obs_cov': self.H,
-                'transition': self.T,
-                'state_intercept': self.c,
-                'selection': self.R,
-                'state_cov': self.Q}
+        return {'design': self.design_matrix,
+                'obs_intercept': self.observation_intercept_vector,
+                'obs_cov': self.observation_covariance_matrix,
+                'transition': self.transition_matrix,
+                'state_intercept': self.state_intercept_vector,
+                'selection': self.selection_matrix,
+                'state_cov': self.state_covariance_matrix}
 
     @property
     def coefficients(self) -> tp.Tuple[tp.Optional[SympyMatrixCandidate], ...]:
-        return self.Z, self.H, self.R, self.Q, self.T, self.c, self.d
+        return (self.design_matrix,
+                self.observation_covariance_matrix,
+                self.selection_matrix,
+                self.state_covariance_matrix,
+                self.transition_matrix,
+                self.state_intercept_vector,
+                self.observation_intercept_vector)
 
     @property
     def free_symbols(self) -> tp.FrozenSet[sym.Symbol]:
@@ -61,74 +67,79 @@ def _check_and_fix_input_matrices_and_infer_dimensions(
         coefficients: SymbolicStateSpaceModelCoefficients,
         attempt_fix: bool = True) \
         -> tp.Tuple[SymbolicStateSpaceModelCoefficients, int, int, int]:
-    Z = check_sympy_matrix(matrix=coefficients.Z,
-                           attempt_fix=attempt_fix,
-                           label='Z')
+    design_matrix = check_sympy_matrix(matrix=coefficients.design_matrix,
+                                       attempt_fix=attempt_fix,
+                                       label='design_matrix')
 
-    R = check_sympy_matrix(matrix=coefficients.R,
-                           attempt_fix=attempt_fix,
-                           label='R')
+    selection_matrix = check_sympy_matrix(matrix=coefficients.selection_matrix,
+                                          attempt_fix=attempt_fix,
+                                          label='selection_matrix')
 
-    k_endog = Z.shape[0]
-    k_states = Z.shape[1]
-    k_posdef = R.shape[1]
+    k_endog = design_matrix.shape[0]
+    k_states = design_matrix.shape[1]
+    k_posdef = selection_matrix.shape[1]
 
-    if R.shape[0] != k_states:
-        raise ValueError('The number of rows of R must correspond to the '
-                         'number of states (number of columns of Z).')
+    if selection_matrix.shape[0] != k_states:
+        raise ValueError('The number of rows of selection_matrix must correspond to the '
+                         'number of states (number of columns of design_matrix).')
 
-    if coefficients.T is not None:
-        T = check_d_dimensional_square_matrix_sympy_expression(
-                matrix=coefficients.T,
+    if coefficients.transition_matrix is not None:
+        transition_matrix = check_d_dimensional_square_matrix_sympy_expression(
+                matrix=coefficients.transition_matrix,
                 d=k_states,
                 attempt_fix=attempt_fix,
-                label='T')
+                label='transition_matrix')
     else:
-        T = None
+        transition_matrix = None
 
-    if coefficients.c is not None:
-        c = check_d_dimensional_column_vector_sympy_expression(
-                matrix=coefficients.c,
+    if coefficients.state_intercept_vector is not None:
+        state_intercept_vector = \
+            check_d_dimensional_column_vector_sympy_expression(
+                matrix=coefficients.state_intercept_vector,
                 d=k_states,
                 attempt_fix=attempt_fix,
-                label='c')
+                label='state_intercept_vector')
     else:
-        c = None
+        state_intercept_vector = None
 
-    if coefficients.Q is not None:
-        Q = check_d_dimensional_square_matrix_sympy_expression(
-                matrix=coefficients.Q,
+    if coefficients.state_covariance_matrix is not None:
+        state_covariance_matrix = \
+            check_d_dimensional_square_matrix_sympy_expression(
+                matrix=coefficients.state_covariance_matrix,
                 d=k_posdef,
                 attempt_fix=attempt_fix,
-                label='Q')
+                label='state_covariance_matrix')
     else:
-        Q = None
+        state_covariance_matrix = None
 
-    if coefficients.d is not None:
-        d = check_d_dimensional_column_vector_sympy_expression(
-                matrix=coefficients.d,
+    if coefficients.observation_intercept_vector is not None:
+        observation_intercept_vector = \
+            check_d_dimensional_column_vector_sympy_expression(
+                matrix=coefficients.observation_intercept_vector,
                 d=k_endog,
                 attempt_fix=attempt_fix,
-                label='d')
+                label='observation_intercept_vector')
     else:
-        d = None
+        observation_intercept_vector = None
 
-    if coefficients.H is not None:
-        H = check_d_dimensional_square_matrix_sympy_expression(
-                matrix=coefficients.H,
+    if coefficients.observation_covariance_matrix is not None:
+        observation_covariance_matrix = \
+            check_d_dimensional_square_matrix_sympy_expression(
+                matrix=coefficients.observation_covariance_matrix,
                 d=k_endog,
                 attempt_fix=attempt_fix,
-                label='H')
+                label='observation_covariance_matrix')
     else:
-        H = None
+        observation_covariance_matrix = None
 
-    return (SymbolicStateSpaceModelCoefficients(Z=Z,
-                                                R=R,
-                                                T=T,
-                                                c=c,
-                                                Q=Q,
-                                                d=d,
-                                                H=H),
+    return (SymbolicStateSpaceModelCoefficients(
+                design_matrix=design_matrix,
+                selection_matrix=selection_matrix,
+                transition_matrix=transition_matrix,
+                state_intercept_vector=state_intercept_vector,
+                state_covariance_matrix=state_covariance_matrix,
+                observation_intercept_vector=observation_intercept_vector,
+                observation_covariance_matrix=observation_covariance_matrix),
             k_endog,
             k_states,
             k_posdef)
@@ -137,13 +148,13 @@ def _check_and_fix_input_matrices_and_infer_dimensions(
 def _ensure_symbols_not_in_coefficients(
         state_vector_symbols: tp.Tuple[sym.Symbol, ...],
         coefficients: SymbolicStateSpaceModelCoefficients):
-    for coefficient in (coefficients.T,
-                        coefficients.c,
-                        coefficients.d,
-                        coefficients.H,
-                        coefficients.Q,
-                        coefficients.R,
-                        coefficients.Z):
+    for coefficient in (coefficients.transition_matrix,
+                        coefficients.state_intercept_vector,
+                        coefficients.observation_intercept_vector,
+                        coefficients.observation_covariance_matrix,
+                        coefficients.state_covariance_matrix,
+                        coefficients.selection_matrix,
+                        coefficients.design_matrix):
         if coefficient is not None and \
            _symbols_in_expression(symbols=state_vector_symbols,
                                   expression=coefficient):
@@ -190,31 +201,46 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
 
     """
 
-    def __init__(self,
-                 parameter_symbols: tp.Tuple[sym.Symbol, ...],
-                 state_vector_symbols: tp.Tuple[sym.Symbol, ...],
-                 observation_vector_symbols: tp.Tuple[sym.Symbol, ...],
-                 data_symbol_to_data_map: tp.Dict[sym.Symbol, np.ndarray],
-                 parameter_symbols_to_start_parameters_map:
-                 tp.Dict[sym.Symbol, numbers.Number],
-                 parameter_transformation: ParameterTransformation,
-                 Z: SympyMatrixCandidate,
-                 H: SympyMatrixCandidate,
-                 R: SympyMatrixCandidate,
-                 Q: SympyMatrixCandidate,
-                 T: tp.Optional[SympyMatrixCandidate] = None,
-                 c: tp.Optional[SympyMatrixCandidate] = None,
-                 d: tp.Optional[SympyMatrixCandidate] = None):
+    def __init__(
+            self,
+            parameter_symbols: tp.Tuple[sym.Symbol, ...],
+            state_vector_symbols: tp.Tuple[sym.Symbol, ...],
+            observation_vector_symbols: tp.Tuple[sym.Symbol, ...],
+            data_symbol_to_data_map: tp.Dict[sym.Symbol, np.ndarray],
+            parameter_symbols_to_start_parameters_map:
+            tp.Dict[sym.Symbol, numbers.Number],
+            parameter_transformation: ParameterTransformation,
+            design_matrix: SympyMatrixCandidate,
+            observation_covariance_matrix: SympyMatrixCandidate,
+            selection_matrix: SympyMatrixCandidate,
+            state_covariance_matrix: SympyMatrixCandidate,
+            transition_matrix: tp.Optional[SympyMatrixCandidate] = None,
+            state_intercept_vector: tp.Optional[SympyMatrixCandidate] = None,
+            observation_intercept_vector: tp.Optional[SympyMatrixCandidate] = None):
         """
-        T: a symbolic matrix with dimension k_states x k_states
-        c: a symbolic vector with dimension k_states
-        R: a symbolic matrix with dimension k_states x k_posdef
-        Q: a positive definite symbolic covariance matrix with dimension k_posdef x k_posdef
-        Z: a symbolic matrix with dimension k_endog x k_states
-        d: a symbolic vector with dimension k_endog
-        H: a positive definite symbolic covariance matrix with dimension k_endog x k_endog
-        k_posdef: the dimensionality of the random vector of shocks to the state
+        
+        Args:
+            parameter_symbols: 
+            state_vector_symbols: 
+            observation_vector_symbols: 
+            data_symbol_to_data_map: 
+            parameter_symbols_to_start_parameters_map: 
+            parameter_transformation: 
+            design_matrix: a symbolic matrix with dimension k_endog x k_states
+            observation_covariance_matrix: a positive definite symbolic 
+                                           covariance matrix with dimension 
+                                           k_endog x k_endog
+            selection_matrix: a symbolic matrix with dimension 
+                              k_states x k_posdef
+            state_covariance_matrix: a positive definite symbolic covariance 
+                                     matrix with dimension k_posdef x k_posdef
+            transition_matrix: a symbolic matrix with dimension 
+                               k_states x k_states
+            state_intercept_vector: a symbolic vector with dimension k_states
+            observation_intercept_vector: a symbolic vector with dimension 
+                                          k_endog
         """
+
         self._parameter_symbols = parameter_symbols
         self._parameter_symbols_to_start_parameters_map = \
             parameter_symbols_to_start_parameters_map
@@ -223,13 +249,14 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
         # check coefficients and infer model dimension
         self._coefficients, k_endog, k_states, k_posdef = \
             _check_and_fix_input_matrices_and_infer_dimensions(
-                SymbolicStateSpaceModelCoefficients(Z=Z,
-                                                    R=R,
-                                                    T=T,
-                                                    c=c,
-                                                    Q=Q,
-                                                    d=d,
-                                                    H=H))
+                SymbolicStateSpaceModelCoefficients(
+                    design_matrix=design_matrix,
+                    selection_matrix=selection_matrix,
+                    transition_matrix=transition_matrix,
+                    state_intercept_vector=state_intercept_vector,
+                    state_covariance_matrix=state_covariance_matrix,
+                    observation_intercept_vector=observation_intercept_vector,
+                    observation_covariance_matrix=observation_covariance_matrix))
 
         # make sure that the coefficients do not contain the state
         _ensure_symbols_not_in_coefficients(
@@ -285,7 +312,8 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
             tuple(list(parameter_symbols) + list(self._exogenous_data_symbols))
 
         # compile coefficient matrices
-        self._stats_models_coefficient_label_to_compiled_coefficient_map: tp.Dict[str, CompiledMatrix] = \
+        self._stats_models_coefficient_label_to_compiled_coefficient_map: \
+            tp.Dict[str, CompiledMatrix] = \
             {label: CompiledMatrix(symbols=all_parameter_symbols,
                                    matrix_expression=coefficient,
                                    label=label)
@@ -372,63 +400,3 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
             (compiled_coefficient
              .set_stats_models_matrix(ssm=self.ssm,
                                       numeric_values=numeric_values))
-
-
-class SymbolicTimeVaryingEquityPremiumModel(
-        SymbolicStateSpaceModelViaMaximumLikelihood):
-    def __init__(self, excess_returns: np.ndarray):
-        parameter_symbols = \
-            sym.symbols(('alpha.mu',
-                         'beta.mu',
-                         'sigma2',
-                         'sigma2.mu'))
-
-        alpha_mu, beta_mu, sigma_2, sigma_2_mu = parameter_symbols
-
-        H = sym.Matrix([sigma_2])
-        Q = sym.Matrix([sigma_2_mu])
-        c = sym.Matrix([alpha_mu])
-        T = sym.Matrix([beta_mu])
-        Z = sym.Matrix.ones(rows=1, cols=1)
-        R = sym.Matrix.ones(rows=1, cols=1)
-
-        state_vector_symbols = tuple([sym.Symbol('mu')])
-        y = sym.Symbol('y')
-        data_symbol_to_data_map = {y: excess_returns}
-        excess_return_variance = np.var(excess_returns)
-        parameter_symbols_to_start_parameters_map = \
-            {alpha_mu: 0.0,
-             beta_mu: 0.0,
-             sigma_2: excess_return_variance,
-             sigma_2_mu: excess_return_variance}
-
-        squared_univariate_transform = \
-            LambdaUnivariateTransformation(
-                transform_function=lambda x: x**2,
-                untransform_function=lambda x: x**0.5)
-
-        parameter_transformation = \
-            IndependentParameterTransformation(
-                parameter_symbols=parameter_symbols,
-                parameter_symbol_to_univariate_transformation_map
-                ={sigma_2: squared_univariate_transform,
-                  sigma_2_mu: squared_univariate_transform})
-
-        super().__init__(parameter_symbols=parameter_symbols,
-                         state_vector_symbols=state_vector_symbols,
-                         observation_vector_symbols=tuple([y]),
-                         data_symbol_to_data_map=data_symbol_to_data_map,
-                         parameter_symbols_to_start_parameters_map
-                         =parameter_symbols_to_start_parameters_map,
-                         parameter_transformation=parameter_transformation,
-                         Z=Z,
-                         R=R,
-                         T=T,
-                         c=c,
-                         Q=Q,
-                         H=H)
-
-
-if __name__ == '__main__':
-    time_varying_equity_premium_model = \
-        SymbolicTimeVaryingEquityPremiumModel(excess_returns=np.ones((15, )))
