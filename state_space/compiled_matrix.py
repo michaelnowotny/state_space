@@ -75,11 +75,23 @@ class CompiledMatrix:
 
         return result
 
-    def set_stats_models_matrix(
+    def update_stats_models_matrix(
             self,
             ssm,
             numeric_values: tp.Tuple[tp.Union[numbers.Number,
                                               np.ndarray], ...]):
+        """
+        This method updates the values in a statsmodels matrix according to a
+        new set of parameters assuming that the whole matrix has been
+        initialized at starting values.
+
+        Args:
+            ssm: statsmodels matrix object
+            numeric_values: tuple of parameter values
+
+        Returns:
+
+        """
         for i in range(self._rows):
             for j in range(self._cols):
                 if not self._is_constant[i, j]:

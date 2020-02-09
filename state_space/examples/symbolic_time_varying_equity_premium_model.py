@@ -1,8 +1,11 @@
 import numpy as np
 import sympy as sym
 
-from state_space import SymbolicStateSpaceModelViaMaximumLikelihood, \
-    LambdaUnivariateTransformation, IndependentParameterTransformation
+from state_space import (
+    SymbolicStateSpaceModelViaMaximumLikelihood,
+    LambdaUnivariateTransformation,
+    IndependentParameterTransformation
+)
 
 
 class SymbolicTimeVaryingEquityPremiumModel(

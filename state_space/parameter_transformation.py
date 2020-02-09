@@ -1,28 +1,44 @@
-import numbers
-import typing as tp
 from abc import ABC, abstractmethod
-
+import numbers
 import numpy as np
 import sympy as sym
+import typing as tp
 
 
 class ParameterTransformation(ABC):
     @abstractmethod
-    def transform_params(self, unconstrained: np.ndarray):
+    def transform_params(self, unconstrained: np.ndarray) -> np.ndarray:
         pass
 
     @abstractmethod
-    def untransform_params(self, constrained: np.ndarray):
+    def untransform_params(self, constrained: np.ndarray) -> np.ndarray:
         pass
+
+
+class LambdaParameterTransformation(ParameterTransformation):
+    def __init__(self,
+                 transform_function: tp.Callable[[np.ndarray],
+                                                 np.ndarray],
+                 untransform_function: tp.Callable[[np.ndarray],
+                                                   np.ndarray]
+                 ):
+        self._transform_function = transform_function
+        self._untransform_function = untransform_function
+
+    def transform_params(self, unconstrained: np.ndarray) -> np.ndarray:
+        return self._transform_function(unconstrained)
+
+    def untransform_params(self, constrained: np.ndarray) -> np.ndarray:
+        return self._untransform_function(constrained)
 
 
 class UnivariateTransformation(ABC):
     @abstractmethod
-    def transform_param(self, unconstrained: numbers.Number):
+    def transform_param(self, unconstrained: numbers.Number) -> numbers.Number:
         pass
 
     @abstractmethod
-    def untransform_param(self, constrained: numbers.Number):
+    def untransform_param(self, constrained: numbers.Number) -> numbers.Number:
         pass
 
 
@@ -36,10 +52,10 @@ class LambdaUnivariateTransformation(UnivariateTransformation):
         self._transform_function = transform_function
         self._untransform_function = untransform_function
 
-    def transform_param(self, unconstrained: numbers.Number):
+    def transform_param(self, unconstrained: numbers.Number) -> numbers.Number:
         return self._transform_function(unconstrained)
 
-    def untransform_param(self, constrained: numbers.Number):
+    def untransform_param(self, constrained: numbers.Number) -> numbers.Number:
         return self._untransform_function(constrained)
 
 
@@ -52,7 +68,7 @@ class IndependentParameterTransformation(ParameterTransformation):
         self._parameter_symbol_to_univariate_transformation_map \
             = parameter_symbol_to_univariate_transformation_map
 
-    def transform_params(self, unconstrained: np.ndarray):
+    def transform_params(self, unconstrained: np.ndarray) -> np.ndarray:
         constrained = np.full_like(unconstrained, fill_value=np.nan)
 
         for i, parameter_symbol in enumerate(self._parameter_symbols):
@@ -64,11 +80,12 @@ class IndependentParameterTransformation(ParameterTransformation):
             if univariate_transform is None:
                 constrained[i] = unconstrained[i]
             else:
-                constrained[i] = univariate_transform.transform_param(unconstrained[i])
+                constrained[i] \
+                    = univariate_transform.transform_param(unconstrained[i])
 
         return constrained
 
-    def untransform_params(self, constrained: np.ndarray):
+    def untransform_params(self, constrained: np.ndarray) -> np.ndarray:
         unconstrained = np.full_like(constrained, fill_value=np.nan)
 
         for i, parameter_symbol in enumerate(self._parameter_symbols):
@@ -80,7 +97,8 @@ class IndependentParameterTransformation(ParameterTransformation):
             if univariate_transform is None:
                 unconstrained[i] = constrained[i]
             else:
-                unconstrained[i] = univariate_transform.untransform_param(constrained[i])
+                unconstrained[i] \
+                    = univariate_transform.untransform_param(constrained[i])
 
         return unconstrained
 

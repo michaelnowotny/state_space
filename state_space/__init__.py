@@ -3,6 +3,7 @@ from .symbolic_state_space_model import \
 
 from .parameter_transformation import (
     ParameterTransformation,
+    LambdaParameterTransformation,
     IndependentParameterTransformation,
     UnivariateTransformation,
     LambdaUnivariateTransformation

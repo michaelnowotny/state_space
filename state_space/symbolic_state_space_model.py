@@ -279,7 +279,7 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
         n_obs = max([len(x) for x in data_symbol_to_data_map.values()])
 
         # construct endogenous data (vector of observations)
-        endogenous_data = np.full((k_states, n_obs), fill_value=np.nan)
+        endogenous_data = np.full((k_endog, n_obs), fill_value=np.nan)
         for i, observation_vector_symbol in enumerate(observation_vector_symbols):
             endogenous_data[i, :] = data_symbol_to_data_map[observation_vector_symbol]
 
@@ -332,10 +332,11 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
                 in (self
                     ._stats_models_coefficient_label_to_compiled_coefficient_map
                     .items()):
-            self.ssm[label] = \
-                (compiled_coefficient
+            a = (compiled_coefficient
                  .evaluate_matrix(numeric_values
                                   =start_parameter_values_and_exogenous_data))
+            self.ssm[label] = a
+
 
     @property
     def coefficients(self) -> SymbolicStateSpaceModelCoefficients:
@@ -397,6 +398,7 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
                 in (self
                     ._stats_models_coefficient_label_to_compiled_coefficient_map
                     .items()):
-            (compiled_coefficient
-             .set_stats_models_matrix(ssm=self.ssm,
-                                      numeric_values=numeric_values))
+            if not compiled_coefficient.all_constant:
+                (compiled_coefficient
+                 .update_stats_models_matrix(ssm=self.ssm,
+                                             numeric_values=numeric_values))
