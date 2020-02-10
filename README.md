@@ -1,2 +1,2 @@
-# state_space
+# State Space
 State Space Models

@@ -337,7 +337,6 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
                                   =start_parameter_values_and_exogenous_data))
             self.ssm[label] = a
 
-
     @property
     def coefficients(self) -> SymbolicStateSpaceModelCoefficients:
         return self._coefficients

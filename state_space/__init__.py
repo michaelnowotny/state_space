@@ -6,5 +6,6 @@ from .parameter_transformation import (
     LambdaParameterTransformation,
     IndependentParameterTransformation,
     UnivariateTransformation,
-    LambdaUnivariateTransformation
+    LambdaUnivariateTransformation,
+    RectangularParameterTransformation
 )
