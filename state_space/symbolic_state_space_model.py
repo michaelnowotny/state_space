@@ -167,13 +167,13 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
     This class models a linear state space model. The unobserved state evolves
     according to
 
-                \alpha_{t+1} &  T_t \alpha_t + c_t + R_t \eta_t
+                s_{t+1} = T_t s_t + c_t + R_t \eta_t
 
     and
 
     The dynamics of the observed variables is given by
 
-                y_t = Z_t \alpha_t + d_t + \epsilon_t.
+                y_t = Z_t s_t + d_t + \epsilon_t.
 
     The distributions of state innovations \eta_t and measurement errors
     \epsilon_t are i.i.d. normal with
