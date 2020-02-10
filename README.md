@@ -30,6 +30,7 @@ State Space adopts the following terminology:
         d: observation intercept  
         H: observation covariance matrix  
 
+The coefficients T,c, R, Q, Z, d, H are specified as SymPy matrices and may involve unknown parameters and exogenous data.
 
 ## Examples
 State Space includes two examples in Jupyter notebooks:  
