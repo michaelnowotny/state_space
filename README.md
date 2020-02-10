@@ -16,7 +16,7 @@ The state innovation \eta_t has a multivariate normal distribution with zero mea
 
 The observation equation maps the unobserved state according to
 
-![Observation Equation](images/observation_equation.png),
+![Observation Equation](images/observation_equation.png).
 
 The observation noise \epsilon_t has a multivariate normal distribution with zero mean and covariance matrix H. 
 The coefficients Z, d, as well as H may depend on exogeneous data and involve unknown parameters that are estimated via MLE.
