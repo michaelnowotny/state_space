@@ -36,3 +36,13 @@ The coefficients T,c, R, Q, Z, d, H are specified as SymPy matrices and may invo
 State Space includes two examples in Jupyter notebooks:  
 1.) A [conditional linear factor model](notebooks/Conditional%20Linear%20Factor%20Model.ipynb) for returns of the Ford motor corporation with S&P 500 returns as the factor.  
 2.) A model of [time-variation in the equity premium](notebooks/Time-Variation%20in%20the%20Equity%20Premium.ipynb) applied to S&P 500 index data.  
+
+## Installation
+<pre>
+    pip install state_space
+</pre>
+or 
+<pre>
+    pip3 install state_space
+</pre>
+if not using Anaconda.
