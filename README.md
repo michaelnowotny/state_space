@@ -12,13 +12,13 @@ In a linear state space model, the state evolves according to
 
 where the coefficients T, c, and R may depend on exogenous variables but not on the state itself. 
 They may involve parameters that must be estimated from the data. 
-$\eta_t$ has a multivariate normal distribution with zero mean and covariance matrix Q, which may depend on exogenous variables but not the state itself.
+The state innovation \eta_t has a multivariate normal distribution with zero mean and covariance matrix Q, which may depend on exogenous variables but not the state itself.
 
 The observation equation maps the unobserved state according to
 
 ![Observation Equation](images/observation_equation.png)
 
-The observation noise $\epsilon_t$ has a multivariate normal distribution with zero mean and covariance matrix H. 
+The observation noise \epsilon_t has a multivariate normal distribution with zero mean and covariance matrix H. 
 The coefficients Z, d, as well as H may depend on exogeneous data and involve unknown parameters that are estimated via MLE.
 
 State Space adopts the following terminology:  
