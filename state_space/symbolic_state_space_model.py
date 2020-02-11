@@ -380,14 +380,9 @@ class SymbolicStateSpaceModelViaMaximumLikelihood(sm.tsa.statespace.MLEModel):
                 .untransform_params(constrained=constrained))
 
     def update(self, params, *args, **kwargs):
-        # params \
-        #     = (super(SymbolicStateSpaceModelViaMaximumLikelihood, self)
-        #        .update(params, *args, **kwargs))
-
-        # parameter_symbols_to_parameters_map = \
-        #     {parameter_symbol: numeric_parameter
-        #      for numeric_parameter, parameter_symbol
-        #      in zip(params, self.parameter_symbols)}
+        params \
+            = (super(SymbolicStateSpaceModelViaMaximumLikelihood, self)
+               .update(params, *args, **kwargs))
 
         # evaluate compiled coefficient matrices and populate statsmodels
         numeric_values = \
