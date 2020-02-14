@@ -9,3 +9,6 @@ from .parameter_transformation import (
     LambdaUnivariateTransformation,
     RectangularParameterTransformation
 )
+
+from .linearize_vector_valued_state_function import \
+    linearize_vector_valued_state_function
