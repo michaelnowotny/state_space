@@ -20,7 +20,7 @@ def linearize_vector_valued_state_function(
     """
 
     # construct dictionary mapping state variables to zero:
-    zero_state_dict = {state_variable: sym.numbers.Zero()
+    zero_state_dict = {state_variable: sym.core.numbers.Zero()
                        for state_variable
                        in state_vector_symbols}
 
